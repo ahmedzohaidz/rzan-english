@@ -1,11 +1,13 @@
 'use client'
 import { useRef, useState } from 'react'
+import { speak } from '@/lib/tts'
 
 interface VisionResult {
-  word:       string
-  meaning_ar: string
-  sentence:   string
-  emoji:      string
+  word:            string
+  meaning_ar:      string
+  sentence:        string
+  emoji:           string
+  detective_note?: string
 }
 
 export default function CameraPage() {
@@ -41,13 +43,7 @@ export default function CameraPage() {
         if (data.error) { setError(data.error); return }
         setResult(data)
         // نطق الكلمة تلقائياً
-        const u  = new SpeechSynthesisUtterance(data.word)
-        u.lang   = 'en-US'
-        u.rate   = 0.8
-        const vs = speechSynthesis.getVoices()
-        const v  = vs.find(x => x.lang.startsWith('en')) ?? vs[0]
-        if (v) u.voice = v
-        speechSynthesis.speak(u)
+        speak(data.word, 'en')
       } catch {
         setError('تعذّر تحليل الصورة، حاولي مرة أخرى')
       } finally {
@@ -173,20 +169,25 @@ export default function CameraPage() {
                 </div>
               </div>
 
+              {/* Detective note (Gemini anime style) */}
+              {result.detective_note && (
+                <div style={{ background:'linear-gradient(135deg,#F5F0FF,#FFF0F5)', borderRadius:14,
+                              padding:'10px 14px', marginBottom:12, fontSize:13,
+                              fontFamily:'Tajawal,sans-serif', color:'#9B72CF', direction:'rtl' }}>
+                  🔍 {result.detective_note}
+                </div>
+              )}
+
               {/* Example sentence */}
               <div style={{ background:'#FDF6EC', borderRadius:14, padding:'12px 16px',
-                            marginBottom:16, fontStyle:'italic', color:'var(--text-mid)',
+                            marginBottom:12, fontStyle:'italic', color:'var(--text-mid)',
                             fontSize:14, direction:'ltr', textAlign:'left' }}>
                 &ldquo;{result.sentence}&rdquo;
               </div>
 
               {/* Pronounce button */}
               <button
-                onClick={() => {
-                  const u = new SpeechSynthesisUtterance(result.word)
-                  u.lang = 'en-US'; u.rate = 0.7
-                  speechSynthesis.speak(u)
-                }}
+                onClick={() => speak(result.word, 'en')}
                 style={{ width:'100%', marginBottom:10, background:'transparent',
                          border:'1.5px solid #E8D5C0', borderRadius:12, padding:'10px',
                          fontFamily:'Tajawal,sans-serif', fontSize:13, color:'var(--text-mid)',

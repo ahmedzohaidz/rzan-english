@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { speak } from '@/lib/tts'
 
 type Status = 'idle' | 'listening' | 'thinking' | 'speaking'
 
@@ -73,20 +74,7 @@ export default function VoicePage() {
 
   function speakResponse(text: string) {
     setStatus('speaking')
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang  = 'en-US'
-    utterance.rate  = 0.85
-    utterance.pitch = 1.1
-    const trySpeak = () => {
-      const voices = speechSynthesis.getVoices()
-      const best   = voices.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('female'))
-                  || voices.find(v => v.lang.startsWith('en'))
-      if (best) utterance.voice = best
-      utterance.onend = () => setStatus('idle')
-      speechSynthesis.speak(utterance)
-    }
-    if (speechSynthesis.getVoices().length > 0) trySpeak()
-    else { speechSynthesis.onvoiceschanged = trySpeak }
+    speak(text, 'en').then(() => setStatus('idle'))
   }
 
   const rippleStyle = isListening ? {

@@ -1,5 +1,5 @@
-import { anthropic, MODEL } from '@/lib/claude'
 import { NextRequest, NextResponse } from 'next/server'
+import { generateStoryChapterGemini } from '@/lib/google-ai'
 
 const THEME_CONTEXTS: Record<string, string> = {
   mystery: 'مدرسة غامضة مليئة بالأسرار الخفية',
@@ -12,32 +12,10 @@ const THEME_CONTEXTS: Record<string, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { theme } = await req.json()
-    const context   = THEME_CONTEXTS[theme] ?? 'a magical adventure'
+    const context   = THEME_CONTEXTS[theme] ?? 'مغامرة سحرية'
 
-    const res = await anthropic.messages.create({
-      model:      MODEL,
-      max_tokens: 400,
-      system:     'أنتِ كاتبة قصص تفاعلية لرزان (12 سنة، تتعلم الإنجليزية). اكتبي القصة بالإنجليزي البسيط مستوى A2. أعيدي JSON صالح فقط بدون أي نص إضافي.',
-      messages: [{
-        role:    'user',
-        content: `اكتبي قصة تجري أحداثها في: ${context}
-البطلة هي رزان نفسها (استخدمي اسمها!).
-الفصل 1: 3-4 جمل إنجليزية بسيطة وحيّة. اختمي بلحظة قرار لرزان.
-أعيدي هذا JSON فقط:
-{
-  "chapterNum": 1,
-  "text": "نص القصة هنا بالإنجليزية...",
-  "choices": {
-    "a": "الخيار الأول (جملة قصيرة بالإنجليزية)",
-    "b": "الخيار الثاني (جملة قصيرة بالإنجليزية)"
-  },
-  "finished": false
-}`,
-      }],
-    })
-
-    const raw = res.content.map((b: any) => b.text || '').join('')
-    return NextResponse.json(JSON.parse(raw.replace(/```json|```/g, '').trim()))
+    const raw = await generateStoryChapterGemini(context, 1, [], false)
+    return NextResponse.json(JSON.parse(raw))
   } catch (err) {
     console.error('Story API error:', err)
     return NextResponse.json({ error: 'فشل إنشاء القصة' }, { status: 500 })

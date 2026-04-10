@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { speak } from '@/lib/tts'
 
 interface StoryChapter {
   text:       string
@@ -159,6 +160,15 @@ export default function StoryPage() {
           }}>
             {story.text}
           </div>
+
+          {/* Read aloud */}
+          <button
+            onClick={() => speak(story.text, 'en')}
+            style={{ width:'100%', marginBottom:16, background:'transparent',
+                     border:'1.5px solid #E8D5C0', borderRadius:14, padding:'10px',
+                     fontFamily:'Tajawal,sans-serif', fontSize:13, color:'var(--text-mid)', cursor:'pointer' }}>
+            🔊 اسمعي القصة بصوت عالٍ
+          </button>
 
           {/* Choices */}
           <p style={{ fontFamily:'Tajawal,sans-serif', fontWeight:700, color:'var(--text-mid)',
