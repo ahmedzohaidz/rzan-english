@@ -8,7 +8,7 @@ import {
 
 /* ─── Types ─────────────────────────────────────────── */
 interface Profile { name:string; level:number; points:number; streak_days:number }
-interface Mission  { id:string; title_ar:string; description_ar:string; mission_type:string; points_reward:number; is_completed:boolean }
+interface Mission  { id:string; title:string; description:string; type:string; points_reward:number; completed:boolean }
 
 /* ─── Helpers ────────────────────────────────────────── */
 function lvlStr(l:number) { return ['','A1','A1+','A2','A2+','B1','B1+'][l] ?? 'A1' }
@@ -64,8 +64,10 @@ export default function DashboardPage() {
       fetch('/api/profile').then(r => r.ok ? r.json() : null),
       fetch('/api/mission').then(r => r.ok ? r.json() : null),
     ]).then(([prof, mis]) => {
-      if (prof?.profile) setProfile(prof.profile)
-      if (mis?.missions) setMissions(mis.missions)
+      // /api/profile returns the profile object directly (not wrapped)
+      if (prof?.id) setProfile(prof)
+      // /api/mission returns the missions array directly
+      if (Array.isArray(mis)) setMissions(mis)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -96,7 +98,7 @@ export default function DashboardPage() {
   }, [])
 
   const word          = todayWord()
-  const doneMissions  = missions.filter(m => m.is_completed).length
+  const doneMissions  = missions.filter(m => m.completed).length
   const totalMissions = missions.length || 3
   const missPct       = totalMissions ? Math.round((doneMissions/totalMissions)*100) : 0
 
@@ -286,23 +288,23 @@ export default function DashboardPage() {
               ) : missions.map(m => (
                 <div key={m.id} style={{
                   display:'flex',alignItems:'center',gap:10,
-                  background: m.is_completed ? '#F0FDF4' : '#FAFAFA',
+                  background: m.completed ? '#F0FDF4' : '#FAFAFA',
                   borderRadius:14,padding:'10px 12px',
-                  border:`1.5px solid ${m.is_completed ? '#86EFAC' : 'var(--border)'}`,
+                  border:`1.5px solid ${m.completed ? '#86EFAC' : 'var(--border)'}`,
                   transition:'all 0.3s',
                 }}>
-                  <span className={m.is_completed ? 'check-bounce' : ''} style={{fontSize:20,flexShrink:0}}>
-                    {m.is_completed ? '✅' : '⭕'}
+                  <span className={m.completed ? 'check-bounce' : ''} style={{fontSize:20,flexShrink:0}}>
+                    {m.completed ? '✅' : '⭕'}
                   </span>
                   <div style={{flex:1,minWidth:0}}>
                     <p style={{fontFamily:'Tajawal,sans-serif',fontSize:13,fontWeight:700,color:'var(--text-dark)',direction:'rtl',lineHeight:1.3}}>
-                      {m.title_ar}
+                      {m.title}
                     </p>
                     <p style={{fontFamily:'Tajawal,sans-serif',fontSize:11,color:'var(--text-soft)',direction:'rtl',marginTop:2}}>
                       +{m.points_reward} نقطة
                     </p>
                   </div>
-                  {!m.is_completed && (
+                  {!m.completed && (
                     <button onClick={() => router.push('/chat')} style={{
                       background:'linear-gradient(135deg,#7C3AED,#A855F7)',
                       color:'white',border:'none',borderRadius:10,
@@ -418,12 +420,27 @@ export default function DashboardPage() {
                     ← للخلف
                   </button>
                   <button
-                    ref={el => { /* attach xp spawn */ }}
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       if (wordSaved) return
+                      const btn = e.currentTarget
                       setWordSaved(true)
-                      spawnXP(10, e.currentTarget)
-                      spawnConfetti(e.currentTarget)
+                      spawnXP(10, btn)
+                      spawnConfetti(btn)
+                      try {
+                        const res = await fetch('/api/vocabulary/save', {
+                          method:  'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body:    JSON.stringify({
+                            word:             word.word,
+                            meaning_ar:       word.meaning,
+                            example_sentence: word.example,
+                          }),
+                        })
+                        if (res.ok) {
+                          // Update local profile points (+5)
+                          setProfile(p => p ? { ...p, points: (p.points ?? 0) + 5 } : p)
+                        }
+                      } catch { /* silent — animation already played */ }
                     }}
                     disabled={wordSaved}
                     style={{

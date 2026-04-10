@@ -1,16 +1,20 @@
 import { createServiceClient } from '@/lib/supabase/service'
+import { getSessionProfile }   from '@/lib/session'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
+    const sessionProfile = await getSessionProfile()
+    if (!sessionProfile) return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+
     const { word, meaning_ar, example_sentence } = await req.json()
     if (!word) return NextResponse.json({ error: 'word required' }, { status: 400 })
 
     const supabase = createServiceClient()
 
-    // Get profile id first
+    // Get profile with current points
     const { data: profile } = await supabase
-      .from('rzan_profile').select('id, points').single()
+      .from('rzan_profile').select('id, points').eq('id', sessionProfile.id).single()
     if (!profile) return NextResponse.json({ error: 'No profile' }, { status: 400 })
 
     // Check if word already exists
