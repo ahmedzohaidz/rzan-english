@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Cairo } from 'next/font/google'
+import InstallBanner from '@/components/InstallBanner'
 import './globals.css'
 
 const cairo = Cairo({
@@ -45,6 +46,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ margin: 0, fontFamily: 'var(--font-cairo), Tajawal, system-ui, sans-serif' }}>
         {children}
+        <InstallBanner />
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').catch(function(){});
+            });
+          }
+        `}} />
       </body>
     </html>
   )
