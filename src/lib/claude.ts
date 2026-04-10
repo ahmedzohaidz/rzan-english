@@ -1,8 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type {
-  Level, RzanProfile, DailyMission,
-  DiagnosticAnswer, DiagnosticResult
-} from '@/types'
+import { levelToString } from '@/types'
+import type { DiagnosticAnswer, DiagnosticResult, EnglishLevel } from '@/types'
+import type { RzanProfileRow } from '@/types/supabase'
 
 export const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -11,18 +10,23 @@ export const anthropic = new Anthropic({
 export const MODEL = 'claude-sonnet-4-20250514'
 
 export function buildTeacherSystemPrompt(
-  level: Level,
+  level: EnglishLevel,
   recentErrors: string[]
 ): string {
-  return `أنت مس نورا، معلمة إنجليزية محبوبة وصبورة لطفلة اسمها رزان.
-رزان عمرها 12 سنة، مستواها ${level}، وتحب الروايات والكتابة الإبداعية.
-أخطاؤها الأخيرة: ${recentErrors.join('، ') || 'لا يوجد بعد'}.
-قواعد التدريس:
-- ردودك: عربي + إنجليزي مختلط بشكل طبيعي
-- صححي أخطاءها بلطف داخل ردك بدون إحراج
-- دائماً اربطي الدروس بعالم القصص والروايات
+  return `أنتِ "المحققة كلود" — مساعدة تعليمية ذكية تساعدين رزان (عمرها 12 سنة) على تعلم اللغة الإنجليزية.
+مستوى رزان: ${level}. تحب الروايات الغامضة والكتابة الإبداعية.
+كلماتها الصعبة مؤخراً: ${recentErrors.join('، ') || 'لا يوجد بعد'}.
+
+قواعد صارمة:
+- تكلمي رزان دائماً بالعربية البسيطة الواضحة المناسبة لعمر 12 سنة
+- الإنجليزي فقط للكلمات والجمل التي تُدرِّسينها
+- بعد كل كلمة إنجليزية اكتبي معناها بالعربية مباشرة: مثال: "adventure (مغامرة)"
+- صحّحي أخطاءها بلطف داخل ردك بدون إحراج مباشر
+- اربطي الدروس دائماً بعالم القصص والروايات الغامضة
 - عند ظهور كلمة جديدة ضعي بعدها: [كلمة جديدة ⭐]
-- شجّعيها دائماً وكوني حماسية`
+- لا تكتبي فقرات طويلة، استخدمي نقاط قصيرة وواضحة
+- ابدئي ردودك دائماً بـ: 🔍 المحققة رزان!
+- أسلوبك: مشجع، لطيف، مثير كالروايات الغامضة`
 }
 
 export async function analyzeDiagnostic(
@@ -38,22 +42,23 @@ export async function analyzeDiagnostic(
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 2000,
-    system: 'You are an expert English assessment specialist. Respond ONLY with valid JSON, no markdown.',
+    system: 'أنت متخصص في تقييم مستوى اللغة الإنجليزية. ردّك يجب أن يكون JSON صالح فقط بدون أي نص إضافي.',
     messages: [{
       role: 'user',
-      content: `Student: Rzan, age 12, Saudi Arabia. Loves writing novels.
-Score: ${score.correct}/${score.total} (${score.pct}%)
-Answers:\n${summary}
+      content: `الطالبة: رزان، عمرها 12 سنة، من السعودية. تحب كتابة الروايات.
+النتيجة: ${score.correct} من ${score.total} (${score.pct}%)
+إجاباتها:\n${summary}
 
-Return JSON: {
+أعد JSON بهذا الشكل بالضبط:
+{
   "level":"A1|A2|B1",
-  "levelName":"string",
-  "levelNameAr":"string",
+  "levelName":"string (مثل: Beginner)",
+  "levelNameAr":"string (مثل: مبتدئة)",
   "overallScore":${score.pct},
-  "strengths":["Arabic string"],
-  "weaknesses":["Arabic string"],
-  "summaryAr":"Arabic 2-3 sentences for parent",
-  "encouragementAr":"Warm Arabic message to Rzan mentioning her love of writing"
+  "strengths":["نقطة قوة بالعربية"],
+  "weaknesses":["نقطة ضعف بالعربية"],
+  "summaryAr":"ملخص 2-3 جمل بالعربية للأب عن مستوى ابنته",
+  "encouragementAr":"رسالة تشجيعية دافئة بالعربية لرزان تذكر فيها حبها للكتابة والروايات"
 }`
     }]
   })
@@ -63,28 +68,28 @@ Return JSON: {
   return JSON.parse(clean) as DiagnosticResult
 }
 
-export async function generateDailyMission(
-  profile: RzanProfile
-): Promise<Omit<DailyMission, 'id' | 'created_at'>> {
+export async function generateDailyMission(profile: RzanProfileRow) {
+  const levelStr = levelToString(profile.level)
+
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 500,
-    system: 'English learning mission generator. Respond ONLY with valid JSON.',
+    system: 'أنت مولّد مهام تعليمية يومية. ردّك يجب أن يكون JSON صالح فقط بدون أي نص إضافي.',
     messages: [{
       role: 'user',
-      content: `Generate a daily mission for Rzan:
-Level: ${profile.level}
-Streak: ${profile.current_streak} days
-Points: ${profile.total_points}
+      content: `أنشئ مهمة يومية لرزان:
+المستوى: ${levelStr}
+السلسلة: ${profile.streak_days} يوم
+النقاط: ${profile.points}
+رزان تحب الروايات الغامضة والكتابة الإبداعية.
 
-Return JSON: {
-  "date": "${new Date().toISOString().split('T')[0]}",
-  "mission_type": "vocabulary|grammar|reading|writing",
-  "description_ar": "Arabic description connecting to novels/stories",
-  "target_count": 3,
-  "completed_count": 0,
-  "is_completed": false,
-  "points_earned": 0
+أعد JSON بهذا الشكل:
+{
+  "mission_date": "${new Date().toISOString().split('T')[0]}",
+  "type": "vocabulary|reading|writing|chat",
+  "title": "عنوان قصير بالعربية",
+  "description": "وصف المهمة بالعربية مرتبط بعالم القصص والروايات (جملة أو جملتان)",
+  "points_reward": 10
 }`
     }]
   })

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_ROUTES  = ['/login']
+const PUBLIC_ROUTES  = ['/login', '/parent/login']
 const PARENT_ROUTE   = '/parent'
 const STUDENT_ROUTES = ['/dashboard', '/diagnostic', '/chat',
                         '/writing', '/vocabulary', '/achievements']
@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
   }
 
   // لوحة الأب
-  if (pathname.startsWith(PARENT_ROUTE)) {
+  if (pathname.startsWith(PARENT_ROUTE) && !pathname.startsWith('/parent/login')) {
     if (!parentAuth) {
       return NextResponse.redirect(new URL('/parent/login', request.url))
     }

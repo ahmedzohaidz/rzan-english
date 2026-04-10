@@ -1,62 +1,103 @@
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&family=Playfair+Display:wght@700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-gold:          #FFD100;
-  --color-gold-light:    #ffe566;
-  --color-gold-dim:      #a08800;
-  --color-purple:        #9b59ff;
-  --color-purple-light:  #c49eff;
-  --color-pink:          #ff6eb4;
-  --color-mint:          #4fffb0;
-  --color-error:         #ff6b6b;
-  --color-app-bg:        #0f0c1a;
-  --color-app-surface:   #1a1528;
-  --color-app-card:      #221d35;
-  --color-app-border:    #2e2847;
-  --color-app-text:      #f0ecff;
-  --color-app-muted:     #8b82b0;
+  /* ── Magical Parchment Colors ── */
+  --color-cream:       #FDF6EC;
+  --color-cream-2:     #FAF0E0;
+  --color-cream-warm:  #FFFBF4;
 
+  --color-rose:        #F4A7B9;
+  --color-rose-deep:   #E8789A;
+  --color-rose-dark:   #C45C7A;
+
+  --color-lav:         #C8A8E9;
+  --color-lav-deep:    #9B72CF;
+  --color-lav-dark:    #7B52AF;
+
+  --color-gold:        #E8A020;
+  --color-gold-light:  #F5C842;
+  --color-gold-pale:   #FDE8A0;
+
+  --color-mint:        #7ED8B5;
+  --color-sky:         #87CEEB;
+
+  --color-app-text:    #3D2B1F;
+  --color-app-mid:     #7A5C48;
+  --color-app-soft:    #B09080;
+  --color-app-border:  #E8D5C0;
+
+  /* ── Fonts ── */
   --font-arabic:  'Tajawal', sans-serif;
   --font-display: 'Playfair Display', serif;
 
-  --animate-fade-up:    fadeUp 0.45s ease both;
-  --animate-float:      float 3s ease-in-out infinite;
-  --animate-shimmer:    shimmer 4s linear infinite;
-  --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
+  /* ── Animations ── */
+  --animate-fade-up:   fadeUp 0.45s ease both;
+  --animate-float:     float 4s ease-in-out infinite;
+  --animate-shimmer:   shimmer 4s linear infinite;
+  --animate-sparkle:   sparkle 3s ease-in-out infinite;
+  --animate-drift:     drift 4s ease-in-out infinite;
+  --animate-pulse-dot: pulseDot 2s ease-in-out infinite;
 
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes float {
-    0%,100% { transform: translateY(0); }
-    50%     { transform: translateY(-8px); }
+    0%,100% { transform: translateY(0) rotate(-2deg); }
+    50%     { transform: translateY(-8px) rotate(2deg); }
   }
   @keyframes shimmer {
     0%   { background-position: 200% center; }
     100% { background-position: -200% center; }
   }
-  @keyframes pulseSoft {
-    0%,100% { transform: scale(1);    opacity: 1; }
-    50%     { transform: scale(0.95); opacity: 0.7; }
+  @keyframes sparkle {
+    0%,100% { transform: scale(1);   opacity: 0.6; }
+    50%     { transform: scale(1.4); opacity: 1; }
+  }
+  @keyframes drift {
+    0%,100% { transform: translate(0,0); }
+    33%     { transform: translate(4px,-6px); }
+    66%     { transform: translate(-4px,4px); }
+  }
+  @keyframes pulseDot {
+    0%,100% { transform: scale(1);   opacity: 1; }
+    50%     { transform: scale(1.3); opacity: 0.7; }
   }
 }
 
+/* ── CSS Variables (for inline styles) ── */
 :root {
-  --gold:         #FFD100;
-  --gold-light:   #ffe566;
-  --purple:       #9b59ff;
-  --purple-light: #c49eff;
-  --pink:         #ff6eb4;
-  --mint:         #4fffb0;
-  --error:        #ff6b6b;
-  --bg:           #0f0c1a;
-  --surface:      #1a1528;
-  --card:         #221d35;
-  --border:       #2e2847;
-  --text:         #f0ecff;
-  --muted:        #8b82b0;
+  --cream:       #FDF6EC;
+  --cream2:      #FAF0E0;
+  --rose:        #F4A7B9;
+  --rose-deep:   #E8789A;
+  --rose-dark:   #C45C7A;
+  --lav:         #C8A8E9;
+  --lav-deep:    #9B72CF;
+  --lav-dark:    #7B52AF;
+  --gold:        #E8A020;
+  --gold-light:  #F5C842;
+  --gold-pale:   #FDE8A0;
+  --mint:        #7ED8B5;
+  --sky:         #87CEEB;
+  --text-dark:   #3D2B1F;
+  --text-mid:    #7A5C48;
+  --text-soft:   #B09080;
+  --border:      #E8D5C0;
+  --shadow:      rgba(180,120,80,0.12);
+
+  /* Legacy aliases (keep existing pages working) */
+  --app-bg:      #FDF6EC;
+  --app-surface: rgba(255,255,255,0.85);
+  --app-card:    #ffffff;
+  --app-border:  #E8D5C0;
+  --app-text:    #3D2B1F;
+  --app-muted:   #B09080;
+  --purple:      #9B72CF;
+  --purple-light:#C8A8E9;
+  --pink:        #F4A7B9;
+  --error:       #E8789A;
 }
 
 html {
@@ -65,31 +106,60 @@ html {
 }
 
 body {
-  background-color: #0f0c1a;
-  color: #f0ecff;
+  background-color: #FDF6EC;
+  color: #3D2B1F;
   font-family: 'Tajawal', sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
-* {
-  box-sizing: border-box;
+/* Parchment texture overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 0; opacity: 0.35;
 }
 
-::-webkit-scrollbar       { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1a1528; }
-::-webkit-scrollbar-thumb { background: #2e2847; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #9b59ff; }
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar       { width: 5px; }
+::-webkit-scrollbar-track { background: #FAF0E0; }
+::-webkit-scrollbar-thumb { background: #E8789A; border-radius: 99px; }
 
 .ltr { direction: ltr; text-align: left; }
 .rtl { direction: rtl; text-align: right; }
 
 .gradient-text {
-  background: linear-gradient(135deg, #FFD100, #9b59ff, #ff6eb4);
+  background: linear-gradient(135deg, #E8789A, #9B72CF, #E8A020);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: shimmer 4s linear infinite;
+}
+
+@layer components {
+  .card-base {
+    @apply bg-white rounded-2xl border border-app-border;
+    box-shadow: 0 4px 20px var(--shadow);
+  }
+  .btn-primary {
+    @apply w-full rounded-full py-4 text-lg font-black text-white;
+    background: linear-gradient(135deg, #E8789A, #9B72CF);
+    box-shadow: 0 8px 24px rgba(200,100,150,0.35);
+    font-family: 'Tajawal', sans-serif;
+  }
+  .btn-secondary {
+    @apply rounded-full py-3 px-6 font-bold border;
+    border-color: var(--rose-deep);
+    color: var(--rose-dark);
+    background: white;
+    font-family: 'Tajawal', sans-serif;
+  }
+  .section-title {
+    @apply text-base font-black px-5 pt-5 pb-3;
+    color: var(--text-dark);
+  }
 }
