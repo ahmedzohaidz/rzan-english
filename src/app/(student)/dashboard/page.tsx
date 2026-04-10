@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ChatIcon, PenIcon, BookOpenIcon, TrophyIcon,
@@ -7,490 +7,472 @@ import {
 } from '@/components/ui/Icons'
 
 /* ─── Types ─────────────────────────────────────────── */
-interface Profile {
-  name:        string
-  level:       number
-  points:      number
-  streak_days: number
-}
-interface Mission {
-  id:           string
-  title_ar:     string
-  description_ar:string
-  mission_type: string
-  points_reward:number
-  is_completed: boolean
-}
+interface Profile { name:string; level:number; points:number; streak_days:number }
+interface Mission  { id:string; title_ar:string; description_ar:string; mission_type:string; points_reward:number; is_completed:boolean }
 
-/* ─── Level helpers ──────────────────────────────────── */
-function lvlStr(l: number) {
-  return ['','A1','A1+','A2','A2+','B1','B1+'][l] ?? 'A1'
-}
+/* ─── Helpers ────────────────────────────────────────── */
+function lvlStr(l:number) { return ['','A1','A1+','A2','A2+','B1','B1+'][l] ?? 'A1' }
+function nextLvlStr(l:number) { return ['','A1+','A2','A2+','B1','B1+','B2'][l] ?? 'A1+' }
 function greeting() {
   const h = new Date().getHours()
   if (h < 12) return 'صباح النور'
   if (h < 18) return 'مساء النور'
   return 'مساء الخير'
 }
-function weekBoxes(streak: number) {
-  return Array.from({ length: 7 }, (_, i) => i < (streak % 7 || 7))
-}
+/* XP needed per level (cumulative thresholds) */
+function xpForLevel(l:number) { return [0,0,100,250,450,700,1000][l] ?? 100 }
+function xpForNextLevel(l:number) { return [0,100,250,450,700,1000,1400][l] ?? 200 }
 
-/* ─── Word of the Day (static, rotated daily) ────────── */
 const WORDS = [
-  { word:'Magnificent', meaning:'رائع / باهر', example:'The story had a magnificent ending.' },
-  { word:'Curious',     meaning:'فضولي',        example:'She was curious about the mystery.' },
-  { word:'Whisper',     meaning:'يهمس',         example:'He whispered a secret in her ear.' },
-  { word:'Adventure',  meaning:'مغامرة',        example:'Every novel is an adventure.' },
-  { word:'Enchanted',  meaning:'مسحور / مبهور', example:'She felt enchanted by the forest.' },
-  { word:'Discover',   meaning:'يكتشف',         example:'She loves to discover new worlds.' },
-  { word:'Journey',    meaning:'رحلة',          example:'Writing is a journey of the soul.' },
+  { word:'Magnificent', meaning:'رائع / باهر',  example:'The story had a magnificent ending.' },
+  { word:'Curious',     meaning:'فضولي',         example:'She was curious about the mystery.' },
+  { word:'Whisper',     meaning:'يهمس',          example:'He whispered a secret in her ear.'  },
+  { word:'Adventure',  meaning:'مغامرة',         example:'Every novel is an adventure.'       },
+  { word:'Enchanted',  meaning:'مسحور / مبهور',  example:'She felt enchanted by the forest.'  },
+  { word:'Discover',   meaning:'يكتشف',          example:'She loves to discover new worlds.'  },
+  { word:'Journey',    meaning:'رحلة',           example:'Writing is a journey of the soul.'  },
 ]
-function todayWord() {
-  const day = Math.floor(Date.now() / 86400000)
-  return WORDS[day % WORDS.length]
-}
+function todayWord() { return WORDS[Math.floor(Date.now()/86400000) % WORDS.length] }
+
+const CONFETTI_COLORS = ['#7C3AED','#E8789A','#F59E0B','#7ED8B5','#C8A8E9','#FDE8A0']
 
 /* ─── Quick Actions ──────────────────────────────────── */
 const ACTIONS = [
-  {
-    icon:  <ChatIcon    size={32} color="#E8789A" />,
-    dot:   '#7ED8B5',
-    label: 'مس نورا',
-    sub:   'تحدثي معها',
-    href:  '/chat',
-    grad:  'linear-gradient(135deg,#FFF0F5,#FDF0FF)',
-    accent:'#E8789A',
-    badge: 'متصلة',
-  },
-  {
-    icon:  <PenIcon     size={32} color="#9B72CF" />,
-    dot:   null,
-    label: 'روايتي',
-    sub:   'اكتبي قصتك',
-    href:  '/writing',
-    grad:  'linear-gradient(135deg,#F5F0FF,#EBF8FF)',
-    accent:'#9B72CF',
-    badge: 'جديد',
-  },
-  {
-    icon:  <BookOpenIcon size={32} color="#E8A020" />,
-    dot:   null,
-    label: 'كلماتي',
-    sub:   'ذاكري الكلمات',
-    href:  '/vocabulary',
-    grad:  'linear-gradient(135deg,#FFF8E0,#FFF3CC)',
-    accent:'#E8A020',
-    badge: 'اليوم',
-  },
-  {
-    icon:  <TrophyIcon  size={32} color="#7ED8B5" />,
-    dot:   null,
-    label: 'إنجازاتي',
-    sub:   'شاركي بطولتك',
-    href:  '/achievements',
-    grad:  'linear-gradient(135deg,#E8FFF5,#E0F7FF)',
-    accent:'#7ED8B5',
-    badge: 'الجوائز',
-  },
+  { icon:<ChatIcon     size={28} color="#7C3AED"/>, label:'مس نورا',   sub:'معلمتك',       href:'/chat',        bg:'#F5F0FF', border:'#DDD5F5', dot:'#7ED8B5' },
+  { icon:<PenIcon      size={28} color="#E8789A"/>, label:'روايتي',    sub:'اكتبي',        href:'/writing',     bg:'#FFF0F5', border:'#F5D5E5', dot:null },
+  { icon:<BookOpenIcon size={28} color="#F59E0B"/>, label:'كلماتي',   sub:'ذاكري',        href:'/vocabulary',  bg:'#FFFBEB', border:'#F5E8C0', dot:null },
+  { icon:<TrophyIcon   size={28} color="#7ED8B5"/>, label:'إنجازاتي', sub:'جوائزك',       href:'/achievements',bg:'#F0FFF8', border:'#C8F0E0', dot:null },
 ]
 
 /* ════════════════════════════════════════════════════════
-   DASHBOARD PAGE
-═══════════════════════════════════════════════════════ */
+   DASHBOARD
+══════════════════════════════════════════════════════ */
 export default function DashboardPage() {
   const router = useRouter()
-  const [profile,      setProfile]      = useState<Profile | null>(null)
-  const [missions,     setMissions]     = useState<Mission[]>([])
-  const [lastStory,    setLastStory]    = useState<{title:string,content:string,id:string} | null>(null)
-  const [wordSaved,    setWordSaved]    = useState(false)
-  const [loading,      setLoading]      = useState(true)
+  const [profile,     setProfile]     = useState<Profile|null>(null)
+  const [missions,    setMissions]    = useState<Mission[]>([])
+  const [wordSaved,   setWordSaved]   = useState(false)
+  const [wordFlipped, setWordFlipped] = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [streakPopped,setStreakPopped]= useState(false)
+  const [particles,   setParticles]   = useState<{id:number;x:number;y:number;text:string}[]>([])
+  const [confetti,    setConfetti]    = useState<{id:number;x:number;y:number;color:string;delay:number}[]>([])
+  const heroRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     Promise.all([
       fetch('/api/profile').then(r => r.ok ? r.json() : null),
       fetch('/api/mission').then(r => r.ok ? r.json() : null),
-      fetch('/api/writing').then(r => r.ok ? r.json() : null),
-    ]).then(([prof, mis, stories]) => {
+    ]).then(([prof, mis]) => {
       if (prof?.profile) setProfile(prof.profile)
       if (mis?.missions) setMissions(mis.missions)
-      if (stories?.entries?.length) {
-        const s = stories.entries[0]
-        setLastStory({ title: s.title, content: s.content?.slice(0,120) ?? '', id: s.id })
-      }
     }).finally(() => setLoading(false))
+  }, [])
+
+  /* ── Spawn +XP float particle ── */
+  const spawnXP = useCallback((amount:number, el:HTMLElement|null) => {
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const id   = Date.now()
+    setParticles(p => [...p, { id, x: rect.left + rect.width/2 - 20, y: rect.top - 10, text:`+${amount} ⭐` }])
+    setTimeout(() => setParticles(p => p.filter(x => x.id !== id)), 1200)
+  }, [])
+
+  /* ── Spawn confetti burst ── */
+  const spawnConfetti = useCallback((el:HTMLElement|null) => {
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const cx = rect.left + rect.width/2
+    const cy = rect.top  + rect.height/2
+    const pieces = Array.from({length:12}, (_,i) => ({
+      id:    Date.now() + i,
+      x:     cx + (Math.random()-0.5)*80,
+      y:     cy + (Math.random()-0.5)*40,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      delay: i * 40,
+    }))
+    setConfetti(p => [...p, ...pieces])
+    setTimeout(() => setConfetti(p => p.filter(c => !pieces.find(x=>x.id===c.id))), 1000)
   }, [])
 
   const word          = todayWord()
   const doneMissions  = missions.filter(m => m.is_completed).length
   const totalMissions = missions.length || 3
-  const pct           = totalMissions ? Math.round((doneMissions / totalMissions) * 100) : 0
+  const missPct       = totalMissions ? Math.round((doneMissions/totalMissions)*100) : 0
+
+  /* XP progress to next level */
+  const lvl       = profile?.level ?? 1
+  const xpTotal   = profile?.points ?? 0
+  const xpFloor   = xpForLevel(lvl)
+  const xpCeil    = xpForNextLevel(lvl)
+  const xpInLevel = Math.max(0, xpTotal - xpFloor)
+  const xpRange   = Math.max(1, xpCeil - xpFloor)
+  const xpPct     = Math.min(100, Math.round((xpInLevel/xpRange)*100))
 
   if (loading) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#FDF6EC' }}>
-      <div style={{ textAlign:'center' }}>
-        <div style={{ fontSize:56, animation:'float 4s ease-in-out infinite' }}>📖</div>
-        <p style={{ fontFamily:'Tajawal,sans-serif', color:'var(--text-mid)', marginTop:12 }}>جاري التحميل...</p>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#F7F3FF'}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:52,animation:'float 3s ease-in-out infinite'}}>📖</div>
+        <p style={{fontFamily:'Tajawal,sans-serif',color:'var(--text-mid)',marginTop:12,fontSize:14}}>جاري التحميل...</p>
       </div>
     </div>
   )
 
   return (
-    <div style={{ maxWidth:480, margin:'0 auto', paddingBottom:8 }}>
+    <>
+      {/* ── Fixed particles (portaled to viewport) ── */}
+      {particles.map(p => (
+        <div key={p.id} className="xp-particle" style={{left:p.x,top:p.y,position:'fixed'}}>{p.text}</div>
+      ))}
+      {confetti.map(c => (
+        <div key={c.id} className="confetti-piece"
+          style={{left:c.x,top:c.y,position:'fixed',background:c.color,animationDelay:`${c.delay}ms`}} />
+      ))}
 
-      {/* ══════════ HEADER ══════════ */}
-      <div style={{
-        background:   'linear-gradient(135deg,#FFECF0 0%,#F3EEFF 50%,#E8F5FF 100%)',
-        borderRadius: '0 0 28px 28px',
-        padding:      '20px 20px 24px',
-        position:     'relative',
-        overflow:     'hidden',
-        marginBottom: 16,
-      }}>
-        {/* Soft bg circles */}
-        <div style={{ position:'absolute', top:-30, right:-30, width:120, height:120, borderRadius:'50%', background:'radial-gradient(circle,rgba(232,120,154,0.15),transparent)', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', bottom:-20, left:-20, width:100, height:100, borderRadius:'50%', background:'radial-gradient(circle,rgba(155,114,207,0.12),transparent)', pointerEvents:'none' }} />
+      <div style={{maxWidth:480,margin:'0 auto',paddingBottom:96}}>
 
-        {/* Greeting row */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-          <div>
-            <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:13, color:'var(--text-mid)', direction:'rtl' }}>
-              {greeting()} ☀️
-            </p>
-            <h1 style={{
-              fontFamily:'var(--font-display)',
-              fontSize:26,
-              fontWeight:900,
-              background:'linear-gradient(135deg,#E8789A,#9B72CF)',
-              WebkitBackgroundClip:'text',
-              WebkitTextFillColor:'transparent',
-              backgroundClip:'text',
-              lineHeight:1.2,
-              direction:'rtl',
-            }}>
-              {profile?.name ?? 'رزان'} ✨
-            </h1>
-          </div>
-          {/* Level badge */}
-          <div style={{
-            background:   'linear-gradient(135deg,#E8A020,#F5C842)',
-            borderRadius: 14,
-            padding:      '8px 14px',
-            textAlign:    'center',
-            boxShadow:    '0 4px 12px rgba(232,160,32,0.3)',
-          }}>
-            <p style={{ fontSize:18, fontWeight:900, color:'white', lineHeight:1 }}>
-              {lvlStr(profile?.level ?? 1)}
-            </p>
-            <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:10, color:'rgba(255,255,255,0.85)', marginTop:2 }}>مستواكِ</p>
-          </div>
-        </div>
-
-        {/* Streak row */}
-        <div style={{
-          background:   'rgba(255,255,255,0.7)',
-          borderRadius: 14,
-          padding:      '10px 14px',
-          display:      'flex',
-          alignItems:   'center',
-          gap:          12,
+        {/* ══ HERO CARD ══════════════════════════════════ */}
+        <div ref={heroRef} style={{
+          background:   'linear-gradient(145deg,#4C1D95 0%,#7C3AED 55%,#A855F7 100%)',
+          borderRadius: '0 0 32px 32px',
+          padding:      '24px 20px 28px',
+          position:     'relative',
+          overflow:     'hidden',
+          marginBottom: 14,
+          boxShadow:    '0 8px 32px rgba(76,29,149,0.35)',
         }}>
-          <span style={{ fontSize:22 }}>🔥</span>
-          <div style={{ flex:1 }}>
-            <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:12, color:'var(--text-mid)', direction:'rtl' }}>
-              سلسلة {profile?.streak_days ?? 0} يوم
-            </p>
-            <div style={{ display:'flex', gap:4, marginTop:5 }}>
-              {weekBoxes(profile?.streak_days ?? 0).map((done, i) => (
-                <div key={i} style={{
-                  width:14, height:14, borderRadius:4,
-                  background: done
-                    ? 'linear-gradient(135deg,#E8789A,#9B72CF)'
-                    : '#E8D5C0',
-                }} />
-              ))}
+          {/* Ambient blobs */}
+          <div style={{position:'absolute',top:-40,right:-30,width:140,height:140,borderRadius:'50%',background:'rgba(255,255,255,0.07)',pointerEvents:'none'}}/>
+          <div style={{position:'absolute',bottom:-30,left:-20,width:110,height:110,borderRadius:'50%',background:'rgba(245,158,11,0.12)',pointerEvents:'none'}}/>
+
+          {/* Top row: greeting + level badge */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+            <div>
+              <p style={{fontFamily:'Tajawal,sans-serif',fontSize:13,color:'rgba(255,255,255,0.7)',direction:'rtl',marginBottom:2}}>
+                {greeting()} 👋
+              </p>
+              <h1 style={{fontFamily:'var(--font-display)',fontSize:28,fontWeight:900,color:'white',lineHeight:1.15,direction:'rtl'}}>
+                {profile?.name ?? 'رزان'} ✨
+              </h1>
+            </div>
+            {/* Level badge */}
+            <div style={{
+              background:'linear-gradient(135deg,#F59E0B,#FBBF24)',
+              borderRadius:16,padding:'10px 16px',textAlign:'center',
+              boxShadow:'0 4px 16px rgba(245,158,11,0.45)',
+              flexShrink:0,
+            }}>
+              <p style={{fontSize:20,fontWeight:900,color:'white',lineHeight:1,fontFamily:'var(--font-display)'}}>
+                {lvlStr(lvl)}
+              </p>
+              <p style={{fontFamily:'Tajawal,sans-serif',fontSize:9,color:'rgba(255,255,255,0.85)',marginTop:2,letterSpacing:'0.04em'}}>
+                مستواكِ
+              </p>
             </div>
           </div>
-          <div style={{ textAlign:'center' }}>
-            <p style={{ fontSize:20, fontWeight:900, color:'var(--rose-dark)', lineHeight:1 }}>
-              {profile?.points ?? 0}
-            </p>
-            <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:10, color:'var(--text-soft)' }}>نقطة</p>
+
+          {/* XP progress to next level */}
+          <div style={{marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+              <span style={{fontFamily:'Tajawal,sans-serif',fontSize:11,color:'rgba(255,255,255,0.65)'}}>
+                {xpInLevel} / {xpRange} XP
+              </span>
+              <span style={{fontFamily:'Tajawal,sans-serif',fontSize:11,color:'rgba(255,255,255,0.65)'}}>
+                → {nextLvlStr(lvl)}
+              </span>
+            </div>
+            <div style={{background:'rgba(255,255,255,0.18)',borderRadius:99,height:8,overflow:'hidden'}}>
+              <div style={{
+                height:'100%',borderRadius:99,
+                background:'linear-gradient(90deg,#FBBF24,#F59E0B)',
+                width:`${xpPct}%`,
+                transition:'width 1s cubic-bezier(.4,0,.2,1)',
+                boxShadow:'0 0 8px rgba(251,191,36,0.6)',
+              }}/>
+            </div>
+          </div>
+
+          {/* Streak + points row */}
+          <div style={{
+            background:'rgba(255,255,255,0.12)',
+            backdropFilter:'blur(8px)',
+            borderRadius:16,padding:'10px 14px',
+            display:'flex',alignItems:'center',gap:12,
+            border:'1px solid rgba(255,255,255,0.15)',
+          }}>
+            <button
+              onClick={() => {
+                setStreakPopped(true)
+                setTimeout(() => setStreakPopped(false), 700)
+              }}
+              style={{
+                background:'none',border:'none',padding:0,cursor:'pointer',
+                fontSize:26,
+                animation: streakPopped ? 'streakPop 0.6s ease both' : 'none',
+                display:'block',
+              }}
+            >
+              🔥
+            </button>
+            <div style={{flex:1}}>
+              <p style={{fontFamily:'Tajawal,sans-serif',fontSize:12,color:'rgba(255,255,255,0.8)',direction:'rtl',marginBottom:5}}>
+                سلسلة <strong style={{color:'white'}}>{profile?.streak_days ?? 0}</strong> يوم
+              </p>
+              {/* 7-day boxes */}
+              <div style={{display:'flex',gap:4}}>
+                {Array.from({length:7},(_,i) => i < ((profile?.streak_days ?? 0) % 7 || (profile?.streak_days ?? 0) >= 7 ? 7 : (profile?.streak_days ?? 0))).map((done,i) => (
+                  <div key={i} style={{
+                    width:16,height:10,borderRadius:3,
+                    background: done ? 'linear-gradient(90deg,#FBBF24,#F59E0B)' : 'rgba(255,255,255,0.2)',
+                    boxShadow: done ? '0 0 6px rgba(251,191,36,0.5)' : 'none',
+                    transition:'background 0.3s',
+                  }}/>
+                ))}
+              </div>
+            </div>
+            <div style={{textAlign:'center',borderRight:'1px solid rgba(255,255,255,0.2)',paddingRight:12}}>
+              <p style={{fontSize:22,fontWeight:900,color:'#FBBF24',lineHeight:1,fontFamily:'var(--font-display)'}}>
+                {profile?.points ?? 0}
+              </p>
+              <p style={{fontFamily:'Tajawal,sans-serif',fontSize:10,color:'rgba(255,255,255,0.65)'}}>نقطة</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div style={{ padding:'0 16px' }}>
+        <div style={{padding:'0 14px'}}>
 
-        {/* ══════════ DAILY MISSION ══════════ */}
-        <div style={{
-          background:   'white',
-          borderRadius: 20,
-          padding:      '18px 18px',
-          marginBottom: 16,
-          border:       '1.5px solid #E8D5C0',
-          boxShadow:    '0 4px 20px rgba(180,120,80,0.1)',
-        }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-            <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:15, fontWeight:700, color:'var(--text-dark)', direction:'rtl' }}>
-              مهام اليوم 🎯
-            </p>
-            <span style={{
-              background:   'linear-gradient(135deg,#E8789A,#9B72CF)',
-              color:        'white',
-              borderRadius: 20,
-              padding:      '3px 12px',
-              fontSize:     12,
-              fontWeight:   700,
-              fontFamily:   'Tajawal,sans-serif',
-            }}>
-              {doneMissions}/{totalMissions}
-            </span>
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ background:'#F5EAE0', borderRadius:99, height:8, marginBottom:14, overflow:'hidden' }}>
+          {/* ══ MISSION CARD ════════════════════════════ */}
+          <div style={{
+            background:'white',borderRadius:22,marginBottom:14,overflow:'hidden',
+            border:'1.5px solid var(--border)',
+            boxShadow:'0 6px 24px var(--shadow)',
+            animation:'fadeUp 0.4s ease both',
+          }}>
+            {/* Gradient header strip */}
             <div style={{
-              height:'100%',
-              borderRadius:99,
-              background:'linear-gradient(90deg,#E8789A,#9B72CF)',
-              width:`${pct}%`,
-              transition:'width 0.5s ease',
-            }} />
-          </div>
-
-          {/* Mission list */}
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {missions.length === 0 ? (
-              <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:13, color:'var(--text-soft)', textAlign:'center', direction:'rtl', padding:'8px 0' }}>
-                لا توجد مهام اليوم — تحققي لاحقاً ✨
+              background:'linear-gradient(90deg,#7C3AED,#A855F7)',
+              padding:'12px 16px',
+              display:'flex',justifyContent:'space-between',alignItems:'center',
+            }}>
+              <p style={{fontFamily:'Tajawal,sans-serif',fontSize:14,fontWeight:900,color:'white',direction:'rtl'}}>
+                مهام اليوم 🎯
               </p>
-            ) : (
-              missions.map(m => (
-                <div key={m.id} style={{
-                  display:      'flex',
-                  alignItems:   'center',
-                  gap:          10,
-                  background:   m.is_completed ? 'rgba(126,216,181,0.1)' : '#FAFAFA',
-                  borderRadius: 12,
-                  padding:      '10px 12px',
-                  border:       `1px solid ${m.is_completed ? 'rgba(126,216,181,0.4)' : '#F0E8DF'}`,
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{
+                  background:'rgba(255,255,255,0.22)',borderRadius:99,
+                  padding:'2px 10px',fontFamily:'Tajawal,sans-serif',
+                  fontSize:12,fontWeight:900,color:'white',
                 }}>
-                  <span style={{ fontSize:20 }}>{m.is_completed ? '✅' : '⭕'}</span>
-                  <div style={{ flex:1 }}>
-                    <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:13, fontWeight:700, color:'var(--text-dark)', direction:'rtl' }}>
+                  {doneMissions}/{totalMissions}
+                </div>
+                <span style={{fontSize:13,color:'rgba(255,255,255,0.85)',fontFamily:'Tajawal,sans-serif'}}>
+                  {missPct}%
+                </span>
+              </div>
+            </div>
+            {/* Progress */}
+            <div style={{height:5,background:'#EDE9FE',overflow:'hidden'}}>
+              <div style={{
+                height:'100%',background:'linear-gradient(90deg,#7C3AED,#E8789A)',
+                width:`${missPct}%`,transition:'width 0.7s ease',
+              }}/>
+            </div>
+            {/* Missions list */}
+            <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:8}}>
+              {missions.length === 0 ? (
+                <p style={{fontFamily:'Tajawal,sans-serif',fontSize:13,color:'var(--text-soft)',textAlign:'center',direction:'rtl',padding:'12px 0'}}>
+                  لا توجد مهام اليوم — تحققي لاحقاً ✨
+                </p>
+              ) : missions.map(m => (
+                <div key={m.id} style={{
+                  display:'flex',alignItems:'center',gap:10,
+                  background: m.is_completed ? '#F0FDF4' : '#FAFAFA',
+                  borderRadius:14,padding:'10px 12px',
+                  border:`1.5px solid ${m.is_completed ? '#86EFAC' : 'var(--border)'}`,
+                  transition:'all 0.3s',
+                }}>
+                  <span className={m.is_completed ? 'check-bounce' : ''} style={{fontSize:20,flexShrink:0}}>
+                    {m.is_completed ? '✅' : '⭕'}
+                  </span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontFamily:'Tajawal,sans-serif',fontSize:13,fontWeight:700,color:'var(--text-dark)',direction:'rtl',lineHeight:1.3}}>
                       {m.title_ar}
                     </p>
-                    <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:11, color:'var(--text-soft)', direction:'rtl' }}>
+                    <p style={{fontFamily:'Tajawal,sans-serif',fontSize:11,color:'var(--text-soft)',direction:'rtl',marginTop:2}}>
                       +{m.points_reward} نقطة
                     </p>
                   </div>
                   {!m.is_completed && (
-                    <button
-                      onClick={() => router.push('/chat')}
-                      style={{
-                        background:   'linear-gradient(135deg,#E8789A,#9B72CF)',
-                        color:        'white',
-                        border:       'none',
-                        borderRadius: 10,
-                        padding:      '6px 12px',
-                        fontSize:     12,
-                        fontWeight:   700,
-                        fontFamily:   'Tajawal,sans-serif',
-                        cursor:       'pointer',
-                        whiteSpace:   'nowrap',
-                      }}
-                    >
-                      ابدئي
+                    <button onClick={() => router.push('/chat')} style={{
+                      background:'linear-gradient(135deg,#7C3AED,#A855F7)',
+                      color:'white',border:'none',borderRadius:10,
+                      padding:'7px 13px',fontSize:12,fontWeight:700,
+                      fontFamily:'Tajawal,sans-serif',cursor:'pointer',
+                      whiteSpace:'nowrap',boxShadow:'0 3px 10px rgba(124,58,237,0.3)',
+                    }}>
+                      ابدئي ←
                     </button>
                   )}
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* ══════════ QUICK ACTIONS 2×2 ══════════ */}
-        <p className="section-title" style={{ paddingRight:0 }}>ابدئي الآن 🚀</p>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
-          {ACTIONS.map(a => (
-            <button
-              key={a.href}
-              onClick={() => router.push(a.href)}
-              style={{
-                background:   a.grad,
-                border:       '1.5px solid rgba(232,213,192,0.5)',
-                borderRadius: 18,
-                padding:      '16px 14px',
-                textAlign:    'right',
-                cursor:       'pointer',
-                boxShadow:    '0 2px 12px rgba(180,120,80,0.08)',
-                position:     'relative',
-                overflow:     'hidden',
-              }}
-            >
-              <span style={{
-                position:   'absolute', top:10, left:10,
-                background: 'rgba(255,255,255,0.7)',
-                borderRadius:20, padding:'2px 8px',
-                fontSize:10, fontFamily:'Tajawal,sans-serif', color:'var(--text-mid)',
-                fontWeight:700,
-              }}>
-                {a.badge}
-              </span>
-              <div style={{ marginBottom:6 }}>{a.icon}</div>
-              <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:15, fontWeight:900, color:'var(--text-dark)', direction:'rtl' }}>
-                {a.label}
-              </p>
-              <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:12, color:'var(--text-mid)', direction:'rtl' }}>
-                {a.sub}
-              </p>
-            </button>
-          ))}
-        </div>
-
-        {/* ══════════ WORD OF THE DAY ══════════ */}
-        <div style={{
-          background:   'linear-gradient(135deg,#FFFDE0,#FFF8C0)',
-          borderRadius: 20,
-          padding:      '18px 18px',
-          marginBottom: 16,
-          border:       '1.5px solid rgba(232,160,32,0.25)',
-          boxShadow:    '0 4px 16px rgba(232,160,32,0.1)',
-        }}>
-          <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:13, color:'var(--text-mid)', marginBottom:8, direction:'rtl' }}>
-            كلمة اليوم 📖
-          </p>
-          <p style={{ fontFamily:'var(--font-display)', fontSize:28, fontWeight:900, color:'var(--text-dark)', marginBottom:4, direction:'ltr' }}>
-            {word.word}
-          </p>
-          <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:15, color:'var(--text-mid)', marginBottom:6, direction:'rtl' }}>
-            {word.meaning}
-          </p>
-          <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:12, color:'var(--text-soft)', marginBottom:14, direction:'ltr', fontStyle:'italic' }}>
-            &ldquo;{word.example}&rdquo;
-          </p>
-          <button
-            onClick={() => setWordSaved(true)}
-            disabled={wordSaved}
-            style={{
-              background:   wordSaved ? 'rgba(126,216,181,0.3)' : 'linear-gradient(135deg,#E8A020,#F5C842)',
-              color:        wordSaved ? '#3D7A5C' : 'white',
-              border:       'none',
-              borderRadius: 12,
-              padding:      '10px 20px',
-              fontSize:     13,
-              fontWeight:   700,
-              fontFamily:   'Tajawal,sans-serif',
-              cursor:       wordSaved ? 'default' : 'pointer',
-              width:        '100%',
-              boxShadow:    wordSaved ? 'none' : '0 4px 12px rgba(232,160,32,0.3)',
-            }}
-          >
-            {wordSaved ? '✅ تم الحفظ!' : 'حفظت الكلمة ⭐'}
-          </button>
-        </div>
-
-        {/* ══════════ LAST STORY ══════════ */}
-        {lastStory && (
-          <div style={{
-            background:   'white',
-            borderRadius: 20,
-            padding:      '18px 18px',
-            marginBottom: 16,
-            border:       '1.5px solid #E8D5C0',
-            boxShadow:    '0 4px 20px rgba(180,120,80,0.08)',
-          }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-              <p style={{ fontFamily:'Tajawal,sans-serif', fontSize:15, fontWeight:700, color:'var(--text-dark)', direction:'rtl' }}>
-                ✍️ آخر قصة كتبتيها
-              </p>
-              <span style={{ fontSize:20 }}>📚</span>
+              ))}
             </div>
-            <p style={{
-              fontFamily:'var(--font-display)',
-              fontSize:16,
-              fontWeight:700,
-              color:'var(--text-dark)',
-              marginBottom:6,
-              direction:'rtl',
-            }}>
-              {lastStory.title}
-            </p>
-            <p style={{
-              fontFamily:'Tajawal,sans-serif',
-              fontSize:13,
-              color:'var(--text-mid)',
-              lineHeight:1.6,
-              direction:'ltr',
-              marginBottom:14,
-              display:'-webkit-box',
-              WebkitLineClamp:3,
-              WebkitBoxOrient:'vertical',
-              overflow:'hidden',
-            }}>
-              {lastStory.content}...
-            </p>
-            <button
-              onClick={() => router.push('/writing')}
-              style={{
-                background:   'linear-gradient(135deg,#C8A8E9,#E8789A)',
-                color:        'white',
-                border:       'none',
-                borderRadius: 12,
-                padding:      '10px 20px',
-                fontSize:     13,
-                fontWeight:   700,
-                fontFamily:   'Tajawal,sans-serif',
-                cursor:       'pointer',
-                width:        '100%',
-                boxShadow:    '0 4px 12px rgba(200,100,150,0.25)',
-              }}
-            >
-              أكملي القصة ✍️
-            </button>
           </div>
-        )}
 
-        {/* ══════════ ADVENTURE CARDS ══════════ */}
-        <p className="section-title" style={{ paddingRight:0 }}>مغامرات اليوم 🌟</p>
-        <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:16, paddingBottom:4 }}>
-          {[
-            { icon:<CameraIcon size={34} color="#3DAA88"/>, label:'ماذا ترين؟', href:'/camera', grad:'linear-gradient(135deg,#E0FFF8,#C8F5E8)' },
-            { icon:<MicIcon    size={34} color="#E8789A"/>, label:'تحدثي',       href:'/voice',  grad:'linear-gradient(135deg,#FFF0F5,#FFE0EE)' },
-            { icon:<BookOpenIcon size={34} color="#9B72CF"/>, label:'قصتي',     href:'/story',  grad:'linear-gradient(135deg,#F5F0FF,#EDE0FF)' },
-          ].map(a => (
-            <button
-              key={a.href}
-              onClick={() => router.push(a.href)}
-              style={{
-                flex:         1,
-                minWidth:     72,
-                minHeight:    88,
-                display:      'flex',
-                flexDirection:'column',
-                alignItems:   'center',
-                justifyContent:'center',
-                gap:          6,
-                background:   a.grad,
-                border:       '1.5px solid rgba(232,213,192,0.5)',
-                borderRadius: 20,
-                cursor:       'pointer',
-                boxShadow:    '0 2px 10px rgba(180,120,80,0.08)',
-                transition:   'transform 0.15s',
-              }}
-              onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-              onPointerUp={e   => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              {a.icon}
-              <span style={{ fontFamily:'Tajawal,sans-serif', fontSize:12, fontWeight:700, color:'var(--text-dark)' }}>
-                {a.label}
-              </span>
-            </button>
-          ))}
+          {/* ══ QUICK ACTIONS — horizontal scroll ═══════ */}
+          <p className="section-title">ابدئي الآن 🚀</p>
+          <div className="h-scroll" style={{paddingBottom:8,marginBottom:6}}>
+            {ACTIONS.map((a,i) => (
+              <button key={a.href} onClick={() => router.push(a.href)}
+                className="pressable"
+                style={{
+                  flexShrink:0,
+                  width:100,minHeight:100,
+                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                  gap:6,
+                  background:a.bg,
+                  border:`1.5px solid ${a.border}`,
+                  borderRadius:20,cursor:'pointer',
+                  boxShadow:'0 2px 10px var(--shadow)',
+                  position:'relative',
+                  animation:`fadeUp ${0.3+i*0.08}s ease both`,
+                }}>
+                {a.dot && (
+                  <span style={{
+                    position:'absolute',top:8,right:10,
+                    width:8,height:8,borderRadius:'50%',
+                    background:a.dot,
+                    boxShadow:`0 0 0 2px white`,
+                    animation:'pulseDot 2s ease-in-out infinite',
+                  }}/>
+                )}
+                <div>{a.icon}</div>
+                <div style={{textAlign:'center'}}>
+                  <p style={{fontFamily:'Tajawal,sans-serif',fontSize:13,fontWeight:900,color:'var(--text-dark)'}}>
+                    {a.label}
+                  </p>
+                  <p style={{fontFamily:'Tajawal,sans-serif',fontSize:10,color:'var(--text-soft)',marginTop:1}}>
+                    {a.sub}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* ══ WORD OF THE DAY — flip card ═════════════ */}
+          <p className="section-title">كلمة اليوم 📖</p>
+          <div className="flip-scene" style={{marginBottom:14}}>
+            <div className={`flip-card${wordFlipped ? ' flipped' : ''}`}
+              style={{minHeight:wordFlipped?200:160}}>
+
+              {/* FRONT */}
+              <div className="flip-face flip-front"
+                onClick={() => !wordSaved && setWordFlipped(f => !f)}
+                style={{
+                  background:'linear-gradient(145deg,#FFFBEB,#FEF3C7)',
+                  borderRadius:22,padding:'24px 20px',
+                  border:'1.5px solid #FDE68A',
+                  boxShadow:'0 6px 24px rgba(245,158,11,0.12)',
+                  cursor:'pointer',minHeight:160,
+                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                  textAlign:'center',gap:8,
+                }}>
+                <p style={{fontFamily:'var(--font-display)',fontSize:38,fontWeight:900,color:'#92400E',direction:'ltr',lineHeight:1}}>
+                  {word.word}
+                </p>
+                <p style={{fontFamily:'Tajawal,sans-serif',fontSize:12,color:'#B45309',opacity:0.8}}>
+                  اضغطي لرؤية المعنى 👆
+                </p>
+              </div>
+
+              {/* BACK */}
+              <div className="flip-face flip-back"
+                style={{
+                  background:'white',
+                  borderRadius:22,padding:'20px 18px',
+                  border:'1.5px solid var(--border)',
+                  boxShadow:'0 6px 24px var(--shadow)',
+                  minHeight:200,
+                }}>
+                <div style={{textAlign:'center',marginBottom:12}}>
+                  <p style={{fontFamily:'var(--font-display)',fontSize:22,fontWeight:900,color:'var(--primary)',direction:'ltr'}}>
+                    {word.word}
+                  </p>
+                  <p style={{fontFamily:'Tajawal,sans-serif',fontSize:20,fontWeight:900,color:'var(--text-dark)',marginTop:4}}>
+                    {word.meaning}
+                  </p>
+                </div>
+                <div style={{
+                  background:'#F7F3FF',borderRadius:14,padding:'10px 14px',
+                  fontFamily:'Georgia,serif',fontSize:13,color:'var(--text-mid)',
+                  direction:'ltr',textAlign:'left',fontStyle:'italic',marginBottom:12,
+                }}>
+                  &ldquo;{word.example}&rdquo;
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={() => setWordFlipped(false)}
+                    style={{
+                      flex:1,background:'transparent',border:'1.5px solid var(--border)',
+                      borderRadius:12,padding:'9px 0',fontFamily:'Tajawal,sans-serif',
+                      fontSize:12,color:'var(--text-mid)',cursor:'pointer',
+                    }}>
+                    ← للخلف
+                  </button>
+                  <button
+                    ref={el => { /* attach xp spawn */ }}
+                    onClick={(e) => {
+                      if (wordSaved) return
+                      setWordSaved(true)
+                      spawnXP(10, e.currentTarget)
+                      spawnConfetti(e.currentTarget)
+                    }}
+                    disabled={wordSaved}
+                    style={{
+                      flex:2,border:'none',borderRadius:12,
+                      padding:'9px 0',fontFamily:'Tajawal,sans-serif',
+                      fontSize:13,fontWeight:900,cursor: wordSaved ? 'default' : 'pointer',
+                      background: wordSaved
+                        ? 'linear-gradient(135deg,#7ED8B5,#4ADE80)'
+                        : 'linear-gradient(135deg,#F59E0B,#FBBF24)',
+                      color:'white',
+                      boxShadow: wordSaved ? 'none' : '0 4px 14px rgba(245,158,11,0.4)',
+                      transition:'all 0.3s',
+                    }}>
+                    {wordSaved ? '✅ محفوظة!' : 'احفظي الكلمة ⭐'}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* ══ ADVENTURE CARDS ═════════════════════════ */}
+          <p className="section-title">مغامرات اليوم 🌟</p>
+          <div style={{display:'flex',gap:10,marginBottom:14}}>
+            {[
+              { emoji:'📸', label:'ماذا ترين؟', href:'/camera', bg:'linear-gradient(135deg,#D1FAE5,#A7F3D0)', border:'#6EE7B7' },
+              { emoji:'🎙️', label:'تحدثي',       href:'/voice',  bg:'linear-gradient(135deg,#FCE7F3,#FBCFE8)', border:'#F9A8D4' },
+              { emoji:'📚', label:'قصتي',        href:'/story',  bg:'linear-gradient(135deg,#EDE9FE,#DDD6FE)', border:'#C4B5FD' },
+            ].map((a,i) => (
+              <button key={a.href}
+                onClick={() => router.push(a.href)}
+                className="pressable"
+                style={{
+                  flex:1,minHeight:86,
+                  display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,
+                  background:a.bg,border:`1.5px solid ${a.border}`,borderRadius:20,
+                  cursor:'pointer',boxShadow:'0 2px 10px var(--shadow)',
+                  animation:`fadeUp ${0.4+i*0.1}s ease both`,
+                }}>
+                <span style={{fontSize:28}}>{a.emoji}</span>
+                <span style={{fontFamily:'Tajawal,sans-serif',fontSize:12,fontWeight:700,color:'var(--text-dark)'}}>
+                  {a.label}
+                </span>
+              </button>
+            ))}
+          </div>
+
         </div>
-
       </div>
-    </div>
+    </>
   )
 }
