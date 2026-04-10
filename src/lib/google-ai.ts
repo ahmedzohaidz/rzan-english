@@ -5,6 +5,11 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai'
 import { anthropic, MODEL } from './claude'
 
+/** Strip markdown code fences that Claude sometimes wraps around JSON */
+function cleanJson(raw: string): string {
+  return raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+}
+
 /* ── Gemini client (lazy — only initialised when key present) ─────────── */
 const GOOGLE_KEY = process.env.GOOGLE_AI_API_KEY ?? ''
 const hasGemini  = Boolean(GOOGLE_KEY && GOOGLE_KEY !== 'your_google_ai_api_key_here')
@@ -19,7 +24,7 @@ if (hasGemini) {
     { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   ]
   geminiFlash = new GoogleGenerativeAI(GOOGLE_KEY).getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash-lite',
     safetySettings,
   })
 }
@@ -66,7 +71,7 @@ export async function generateStoryChapterGemini(
         contents:         [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 450 },
       })
-      return result.response.text()
+      return cleanJson(result.response.text())
     } catch (err) {
       console.warn('[google-ai] Gemini story failed, falling back to Claude:', (err as Error).message)
     }
@@ -79,7 +84,7 @@ export async function generateStoryChapterGemini(
     system:     'أنتِ كاتبة قصص تفاعلية. ردّك يجب أن يكون JSON صالح فقط بدون أي نص إضافي.',
     messages:   [{ role: 'user', content: prompt }],
   })
-  return resp.content.map(b => ('text' in b ? b.text : '')).join('')
+  return cleanJson(resp.content.map(b => ('text' in b ? b.text : '')).join(''))
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -110,7 +115,7 @@ export async function analyzeImageGemini(imageBase64: string, mimeType: string):
         }],
         generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 200 },
       })
-      return result.response.text()
+      return cleanJson(result.response.text())
     } catch (err) {
       console.warn('[google-ai] Gemini vision failed, falling back to Claude:', (err as Error).message)
     }
@@ -134,7 +139,7 @@ export async function analyzeImageGemini(imageBase64: string, mimeType: string):
       ],
     }],
   })
-  return resp.content.map(b => ('text' in b ? b.text : '')).join('')
+  return cleanJson(resp.content.map(b => ('text' in b ? b.text : '')).join(''))
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -163,7 +168,7 @@ export async function generateMissionGemini(
         contents:         [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 250 },
       })
-      return result.response.text()
+      return cleanJson(result.response.text())
     } catch (err) {
       console.warn('[google-ai] Gemini mission failed, falling back to Claude:', (err as Error).message)
     }
@@ -176,5 +181,5 @@ export async function generateMissionGemini(
     system:     'أنتِ مولّدة مهام تعليمية. ردّك يجب أن يكون JSON صالح فقط بدون أي نص إضافي.',
     messages:   [{ role: 'user', content: prompt }],
   })
-  return resp.content.map(b => ('text' in b ? b.text : '')).join('')
+  return cleanJson(resp.content.map(b => ('text' in b ? b.text : '')).join(''))
 }
